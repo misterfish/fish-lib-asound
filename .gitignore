@@ -3,3 +3,5 @@
 
 *.swo
 *.swp
+
+fish-lib-util/*

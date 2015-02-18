@@ -36,12 +36,14 @@
 #define F_ASOUND_HEADPHONE 0x01
 */
     
+/* Take out XX
+ */
 #define f_warnp(x, ...) do {\
     char *pref = f_get_warn_prefix(__FILE__, __LINE__); \
     int len = strlen(pref); \
-    char *warning = str(__FISH_WARN_LENGTH); \
-    snprintf(warning, __FISH_WARN_LENGTH, x, ##__VA_ARGS__); \
-    int len2 = strnlen(warning, __FISH_WARN_LENGTH);  \
+    char *warning = str(_FISH_WARN_LENGTH); \
+    snprintf(warning, _FISH_WARN_LENGTH, x, ##__VA_ARGS__); \
+    int len2 = strnlen(warning, _FISH_WARN_LENGTH);  \
     char *new = str(len + len2 + 1);   \
     sprintf(new, "%s%s", pref, warning);  \
     f_warn(new); \

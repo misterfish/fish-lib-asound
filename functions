@@ -1,0 +1,87 @@
+G() {
+    echo -n [32m"${@}"[0m
+}
+BG() {
+    echo -n [92m"${@}"[0m
+}
+Y() {
+    echo -n [33m"${@}"[0m
+}
+BY() {
+    echo -n [93m"${@}"[0m
+}
+R() {
+    echo -n [31m"${@}"[0m
+}
+BR() {
+    echo -n [91m"${@}"[0m
+}
+B() {
+    echo -n [34m"${@}"[0m
+}
+BB() {
+   echo -n [94m"${@}"[0m
+}
+M() {
+    echo -n [35m"${@}"[0m
+}
+BM() {
+    echo -n [95m"${@}"[0m
+}
+CY() {
+    echo -n [36m"${@}"[0m
+}
+BCY() {
+    echo -n [96m"${@}"[0m
+}
+
+doit() {
+    echo "$@"
+    "$@"
+}
+
+cmd() {
+    G "* "
+    echo "$@"
+    eval "$@"
+}
+
+quiet() {
+    eval "$@ >/dev/null 2>&1"
+}
+
+push() {
+    name=$1
+    eval "$name=(\"\${$name[@]}\" \"$2\")"
+}
+
+assert_arg() {
+    var=$1
+    if [ -z "$var" ]; then
+        echo "error assert_arg"
+        exit 1
+    fi
+    eval "val=\$$var"
+    if [ -z "$val" ]; then
+        if [ -n "$USAGE" ]; then
+            echo $USAGE
+        fi
+        exit 1
+    fi
+}
+
+info() {
+    BB '* '
+    if [ "$1" = '-n' ]; then
+        shift
+        echo -n "$@"
+    else
+        echo "$@"
+    fi
+}
+
+error() {
+    R '* '
+    echo "Error: $@"
+    exit 1
+}

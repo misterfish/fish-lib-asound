@@ -19,13 +19,7 @@
 
 #define FASOUND_OPTIONS_QUIET   0x01
 
-/*
-#define F_ASOUND_END 0
-#define F_ASOUND_MASTER 0x01
-#define F_ASOUND_PCM 0x01
-#define F_ASOUND_SPEAKER 0x01
-#define F_ASOUND_HEADPHONE 0x01
-*/
+#define FASOUND_CHAN_ALL    -1
     
 bool fasound_init(int options, 
         const char *card_names_string[FASOUND_MAX_SOUND_CARDS], 
@@ -33,8 +27,10 @@ bool fasound_init(int options,
         const char *ctls[FASOUND_MAX_SOUND_CARDS][FASOUND_MAX_ELEMS],
         int fds[FASOUND_MAX_SOUND_CARDS][FASOUND_MAX_FDS]
 );
-bool fasound_set(int, int, double);
-bool fasound_set_rel(int, int, int);
+
+bool fasound_set(int card, int ctl, int chan, double val_perc);
+bool fasound_set_rel(int card, int ctl, int chan, int delta_perc);
+
 bool fasound_update(int, int, bool*);
 bool fasound_get(int, int, double*);
 bool fasound_handle_event(int);

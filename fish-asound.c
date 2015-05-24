@@ -142,12 +142,15 @@ bool fasound_init(int options,
     return true;
 }
 
-/* Don't forget to call fasound_update after each set, or to poll on the fds
+/* chan_idx can have the special value FASOUND_CHAN_ALL. This is an opaque,
+ * mysterious, unknowable integer, which is -1.
+ *
+ * Don't forget to call fasound_update after each set, or to poll on the fds
  * and call handle event, to have the set event be processed by this
  * library.
  */
 
-bool fasound_set(int card_idx, int ctl_idx, double val_perc) {
+bool fasound_set(int card_idx, int ctl_idx, int chan_idx, double val_perc) {
     if (card_idx >= g.num_cards)
         pieprf;
     struct card *card = g.cards[card_idx];
@@ -162,14 +165,23 @@ bool fasound_set(int card_idx, int ctl_idx, double val_perc) {
     debug("capi: set %f max %d min %d", set, ctl->max, ctl->min, set);
 
     snd_mixer_elem_t* elem = ctl->elem;
-    int rc;
-    if (rc = snd_mixer_selem_set_playback_volume_all(elem, set)) 
+
+    int rc = 0;
+    if (chan_idx == FASOUND_CHAN_ALL) 
+        rc = snd_mixer_selem_set_playback_volume_all(elem, set);
+    else 
+        rc = snd_mixer_selem_set_playback_volume(elem, chan_idx, set);
+
+    if (rc)
         _errorrf(rc);
 
     return true;
 }
 
-bool fasound_set_rel(int card_idx, int ctl_idx, int delta_perc) {
+/* chan_idx can have the special value FASOUND_CHAN_ALL. 
+ */
+bool fasound_set_rel(int card_idx, int ctl_idx, int chan_idx, int delta_perc) {
+
     if (card_idx >= g.num_cards)
         pieprf;
     struct card *card = g.cards[card_idx];
@@ -178,7 +190,15 @@ bool fasound_set_rel(int card_idx, int ctl_idx, int delta_perc) {
     struct ctl *ctl = card->ctls[ctl_idx];
 
     bool ok = true;
-    for (int chan_ary_id = 0; chan_ary_id < ctl->num_chans; chan_ary_id++) {
+    int floor, ceiling;
+    if (chan_idx == FASOUND_CHAN_ALL) {
+        floor = 0;
+        ceiling = ctl->num_chans - 1;
+    }
+    else
+        floor = ceiling = chan_idx;
+
+    for (int chan_ary_id = floor; chan_ary_id <= ceiling; chan_ary_id++) {
         int chan = ctl->chans[chan_ary_id];
 
         /* cur is assumed to always be kept current.
@@ -318,7 +338,8 @@ bool fasound_finish() {
 }
 
 /* Copy of old version of fish-util/warn.
- * If this lib is embedded in Perl/XS, the name warn clashes.
+ * Necessary because if this lib is embedded in Perl/XS, the name 'warn'
+ * clashes.
  */
 void f_warn(const char* format, ...) {
     int WARN_LENGTH = 500;

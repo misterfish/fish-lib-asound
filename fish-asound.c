@@ -88,6 +88,8 @@ static bool get_poll_descriptors(struct card *card);
 
 /* The application can find out how many cards there were by looping through
  * the first array until hitting null; ditto for ctls per card.
+ * As for fds, loop through and find non-zero vals. 0 is technically a valid
+ * fd, but it points to stdin. Except in really unusual situations maybe.
  */
 bool fasound_init(int options, 
         const char *card_names_string[FASOUND_MAX_SOUND_CARDS], 

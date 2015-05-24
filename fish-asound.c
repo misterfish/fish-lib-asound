@@ -5,6 +5,37 @@
 
 //#define TEST 
 
+// see enum _snd_mixer_selem_channel_id in mixer.h
+#define CHAN_MIN 0
+#define CHAN_MAX 8
+
+#define _errorrf(x) do { \
+    _error(x); \
+    return false; \
+} while (0)
+
+#define _errorrnull(x) do { \
+    _error(x); \
+    return NULL; \
+} while (0)
+
+#define _errormsg(errnum, msg, msg_strlen) { \
+    const char *err = snd_strerror(errnum); \
+    char *s; \
+    if (msg) { \
+        s = str(msg_strlen + strlen(err) + 3 + 1); \
+        sprintf(s, "%s (%s)", msg, err); \
+        iwarn(s); \
+    } \
+    else { \
+        iwarn((char *) err); \
+    } \
+} while (0)
+
+#define _error(errnum) do { \
+    _errormsg(errnum, NULL, 0); \
+} while (0)
+
 struct ctl {
     snd_mixer_elem_t *elem; // simple mixer element = PCM etc.
     int chans[CHAN_MAX - CHAN_MIN + 1];
@@ -54,10 +85,10 @@ static bool get_poll_descriptors(struct card *card);
  */
 
 bool fasound_init(int options, 
-        const char *card_names_string[MAX_SOUND_CARDS], 
-        const char *card_names_hw[MAX_SOUND_CARDS],
-        const char *ctl_names[MAX_SOUND_CARDS][MAX_ELEMS],
-        int fds[MAX_SOUND_CARDS][MAX_FDS]
+        const char *card_names_string[FASOUND_MAX_SOUND_CARDS], 
+        const char *card_names_hw[FASOUND_MAX_SOUND_CARDS],
+        const char *ctl_names[FASOUND_MAX_SOUND_CARDS][FASOUND_MAX_ELEMS],
+        int fds[FASOUND_MAX_SOUND_CARDS][FASOUND_MAX_FDS]
 ) {
     /*
      * When things change, we do call init again.
@@ -70,9 +101,9 @@ bool fasound_init(int options,
     bool quiet = options & FASOUND_OPTIONS_QUIET;
 
     if (!get_card_info(quiet)) 
-        f_pieprf;
+        pieprf;
 
-    for (int i = 0; i < MAX_SOUND_CARDS; i++) {
+    for (int i = 0; i < FASOUND_MAX_SOUND_CARDS; i++) {
         struct card *card = g.cards[i];
         if (!card) 
             continue;
@@ -192,7 +223,7 @@ bool fasound_update(int card_idx, int ctl_idx, bool *changed) {
             BR(ctl->name);
             spr("%d", chan);
             Y(_t);
-            f_warnp("Can't get volume for ctl %s, chan %s.", _s, _u);
+            iwarn("Can't get volume for ctl %s, chan %s.", _s, _u);
             ctl->cur_val[chan] = -1;
             return false;
         }
@@ -242,15 +273,22 @@ bool fasound_get(int card_idx, int ctl_idx, double *val_perc) {
     return true;
 }
 
+/* If the application is polling the file descriptor of the mixer for
+ * external sound events, it should call this to clear the flag.
+ */
+
 bool fasound_handle_event(int card_num) {
-    assert(card_num < g.num_cards);
+    if (card_num >= g.num_cards) {
+        _();
+        spr("%d", card_num);
+        BR(_s);
+        iwarn("Invalid card num (%s)", _t);
+        return false;
+    }
     struct card *card = g.cards[card_num];
     if (! card) 
         pieprf;
     snd_mixer_t *mixer = card->mixer;
-    /* Clear the flag on the file descriptor. There might be a cheaper way
-     * to do this.
-     */
     int rc = snd_mixer_handle_events(mixer);
     return true;    
 }
@@ -267,6 +305,9 @@ bool fasound_finish() {
     return true;
 }
 
+/* Copy of old version of fish-util/warn.
+ * If this lib is embedded in Perl/XS, the name warn clashes.
+ */
 void f_warn(const char* format, ...) {
     int WARN_LENGTH = 500;
     int COLOR_LENGTH = 5;
@@ -282,8 +323,7 @@ void f_warn(const char* format, ...) {
     vsnprintf(new, WARN_LENGTH, format, arglist );
     vsnprintf( new2, WARN_LENGTH + 1, format, arglist_copy );
     if (strncmp(new, new2, WARN_LENGTH)) { // no + 1 necessary
-        //warn("Warn string truncated.");
-        printf("warn: warn string truncated\n");
+        fprintf(stderr, "warn: warn string truncated\n");
     }
     va_end( arglist );
 
@@ -329,18 +369,18 @@ static bool get_card_info(bool quiet) {
     snd_ctl_card_info_alloca(&card_info);
 
     char hw[6];
-    assert(MAX_SOUND_CARDS < 99);
+    assert(FASOUND_MAX_SOUND_CARDS < 99);
 
     bool found_a_card = false;
 
-    g.cards = calloc(MAX_SOUND_CARDS, sizeof(char*));
+    g.cards = calloc(FASOUND_MAX_SOUND_CARDS, sizeof(char*));
 
     /* Card loop.
      */
-    for (int i = 0; i < MAX_SOUND_CARDS + 1; i++) {
-        if (i == MAX_SOUND_CARDS) {
+    for (int i = 0; i < FASOUND_MAX_SOUND_CARDS + 1; i++) {
+        if (i == FASOUND_MAX_SOUND_CARDS) {
             _();
-            spr("%d", MAX_SOUND_CARDS);
+            spr("%d", FASOUND_MAX_SOUND_CARDS);
             Y(_s);
             spr("More than %s sound cards found, ignoring extra ones.", _t);
             f_warn(_u);
@@ -392,7 +432,7 @@ static bool get_card_info(bool quiet) {
          */
         snd_mixer_t *mixer = get_mixer(name_hw);
         if (!mixer) {
-            f_piep;
+            piep;
             continue;
         }
         card->mixer = mixer;

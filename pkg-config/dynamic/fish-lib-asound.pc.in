@@ -1,0 +1,15 @@
+maindir = "${topdir}"
+
+Name: fish-asound
+Description: Bindings for ALSA (asound2) API.
+Version: 0.5.0
+URL: http://github.com/misterfish/fish-lib-asound
+# Don't put things in Requires/Requires.private unless they also have .pc files.
+Requires: 
+Requires.private: 
+Conflicts: 
+Libs: -L${maindir} -lfish-asound -lasound
+# --static
+Libs.private:
+Cflags: -I${maindir}
+

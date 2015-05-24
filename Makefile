@@ -3,11 +3,8 @@
 fish_util_dir = fish-lib-util/fish-util
 fish_util_o = $(fish_util_dir)/fish-util.o
 
-#glib_inc_dir = $(shell pkg-config --cflags glib-2.0)
-
-FLAGS_C = -std=c99 -fPIC -lm -lpthread -lasound -I$(fish_util_dir)
+FLAGS_C = -std=c99 -fPIC -lasound -I$(fish_util_dir) #-lm
 FLAGS_SHARED = -fPIC -shared
-#FLAGS_SHARED = -shared
 
 all: fish-asound.o libfish-asound.so
 
@@ -31,6 +28,7 @@ install: all
 
 
 clean: 
+	make -C fish-lib-util clean
 	rm -f *.o
 	rm -f *.so
 	rm -f test

@@ -1,4 +1,4 @@
-//#define DEBUG  // before fish-util-h
+//#define DEBUG  // before fish-util.h
 
 #include "fish-asound.h"
 #include <inttypes.h> // abs
@@ -73,10 +73,12 @@ static struct {
     int num_cards;
 
     int max_num_ctls;
+
+    bool quiet;
 } g;
 
 static snd_mixer_t *get_mixer(const char *card);
-static bool get_card_info(bool);
+static bool get_card_info();
 static bool get_poll_descriptors(struct card *card);
 
 /* TODO
@@ -84,6 +86,9 @@ static bool get_poll_descriptors(struct card *card);
  * mute
  */
 
+/* The application can find out how many cards there were by looping through
+ * the first array until hitting null; ditto for ctls per card.
+ */
 bool fasound_init(int options, 
         const char *card_names_string[FASOUND_MAX_SOUND_CARDS], 
         const char *card_names_hw[FASOUND_MAX_SOUND_CARDS],
@@ -98,9 +103,9 @@ bool fasound_init(int options,
     }
     */
 
-    bool quiet = options & FASOUND_OPTIONS_QUIET;
+    g.quiet = options & FASOUND_OPTIONS_QUIET;
 
-    if (!get_card_info(quiet)) 
+    if (!get_card_info()) 
         pieprf;
 
     for (int i = 0; i < FASOUND_MAX_SOUND_CARDS; i++) {
@@ -136,6 +141,11 @@ bool fasound_init(int options,
     g.initted = 1;
     return true;
 }
+
+/* Don't forget to call fasound_update after each set, or to poll on the fds
+ * and call handle event, to have the set event be processed by this
+ * library.
+ */
 
 bool fasound_set(int card_idx, int ctl_idx, double val_perc) {
     if (card_idx >= g.num_cards)
@@ -205,7 +215,8 @@ bool fasound_set_rel(int card_idx, int ctl_idx, int delta_perc) {
 }
 
 bool fasound_update(int card_idx, int ctl_idx, bool *changed) {
-    *changed = false;
+    if (changed) 
+        *changed = false;
     if (card_idx >= g.num_cards)
         pieprf;
     struct card *card = g.cards[card_idx];
@@ -231,7 +242,8 @@ bool fasound_update(int card_idx, int ctl_idx, bool *changed) {
         long old_value = ctl->cur_val[chan];
         if (old_value != this_value) {
             ctl->cur_val[chan] = this_value;
-            *changed = true;
+            if (changed) 
+                *changed = true;
         }
 
         debug("capi: Got value %d for card %d ctl %d chan %d", this_value, card_idx, ctl_idx, chan);
@@ -299,8 +311,8 @@ bool fasound_finish() {
         return false;
     }
 
-    info("Goodbye.");
-    //snd_mixer_close(g.mixer);
+    if (! g.quiet)
+        info("Goodbye.");
     g.finished = 1;
     return true;
 }
@@ -358,11 +370,13 @@ static snd_mixer_t *get_mixer(const char* name_hw) {
     return mixer;
 }
     
-static bool get_card_info(bool quiet) {
+static bool get_card_info() {
     /* Start from -1, meaning, _next gives first card.
      */
     int rcard = -1;
     int rc;
+
+    bool quiet = g.quiet;
 
     snd_ctl_t *ctl;
     snd_ctl_card_info_t *card_info;
@@ -415,7 +429,8 @@ static bool get_card_info(bool quiet) {
         _();
         G(name_string);
         Y(name_hw);
-        if (!quiet) info("Found card %s at %s", _s, _t);
+        if (!quiet) 
+            info("Found card %s at %s", _s, _t);
 
         struct card *card = malloc(sizeof(struct card));
         memset(card, '\0', sizeof(struct card));
@@ -474,15 +489,18 @@ static bool get_card_info(bool quiet) {
 
             _();
             G(sn);
-            if (!quiet) info(" Found playback control %s", _s);
+            if (!quiet) 
+                info(" Found playback control %s", _s);
 
             _();
             M("Range");
-            if (!quiet) info("  %s: %d - %d", _s, min, max);
+            if (!quiet) 
+                info("  %s: %d - %d", _s, min, max);
 
             bool active = (bool) snd_mixer_selem_is_active(elem);
             if (!active) {
-                if (!quiet) info("  Element not active.");
+                if (!quiet) 
+                    info("  Element not active.");
                 continue;
             }
 
@@ -505,7 +523,8 @@ static bool get_card_info(bool quiet) {
                 if (snd_mixer_selem_has_playback_channel(elem, chan_id)) {
                     _();
                     B("Channel");
-                    if (!quiet) info("   %s %d supported.", _s, chan_id);
+                    if (!quiet) 
+                        info("   %s %d supported.", _s, chan_id);
                     chan_ary_id++;
                     ctl->chans[chan_ary_id] = chan_id;
                     found_a_chan = true;
@@ -513,10 +532,7 @@ static bool get_card_info(bool quiet) {
             }
             ctl->num_chans = chan_ary_id + 1;
             if (! found_a_chan) {
-                if (count) 
-                    f_warn(" Didn't find any usable channels.");
-                else 
-                    info(" Didn't find any usable channels.");
+                f_warn(" Didn't find any usable channels.");
                 continue;
             }
             j++;

@@ -26,6 +26,7 @@
         s = str(msg_strlen + strlen(err) + 3 + 1); \
         sprintf(s, "%s (%s)", msg, err); \
         iwarn(s); \
+        free(s); \
     } \
     else { \
         iwarn((char *) err); \
@@ -36,7 +37,7 @@
     _errormsg(errnum, NULL, 0); \
 } while (0)
 
-struct ctl {
+struct ctl_t {
     snd_mixer_elem_t *elem; // simple mixer element = PCM etc.
     int chans[CHAN_MAX - CHAN_MIN + 1];
     int num_chans;
@@ -48,14 +49,14 @@ struct ctl {
     long cur_val[CHAN_MAX - CHAN_MIN + 1];
 };
 
-struct card {
+struct card_t {
     int idx; // corresponds to hw:<idx>
 
     const char *name_hw;
     const char *name_string;
 
     snd_mixer_t *mixer;
-    struct ctl **ctls;
+    struct ctl_t **ctls;
     int num_ctls;
 
     bool can_poll;
@@ -69,7 +70,7 @@ static struct {
     int initted;
     int finished;
 
-    struct card **cards;
+    struct card_t **cards;
     int num_cards;
 
     int max_num_ctls;
@@ -79,12 +80,7 @@ static struct {
 
 static snd_mixer_t *get_mixer(const char *card);
 static bool get_card_info();
-static bool get_poll_descriptors(struct card *card);
-
-/* TODO
- * mallocs
- * mute
- */
+static bool get_poll_descriptors(struct card_t *card);
 
 /* The application can find out how many cards there were by looping through
  * the first array until hitting null; ditto for ctls per card.
@@ -97,33 +93,25 @@ bool fasound_init(int options,
         const char *ctl_names[FASOUND_MAX_SOUND_CARDS][FASOUND_MAX_ELEMS],
         int fds[FASOUND_MAX_SOUND_CARDS][FASOUND_MAX_FDS]
 ) {
-    /*
-     * When things change, we do call init again.
-    if (g.initted) {
-        f_warn("fasound_init called twice.");
-        return false;
-    }
-    */
-
     g.quiet = options & FASOUND_OPTIONS_QUIET;
 
     if (!get_card_info()) 
         pieprf;
 
     for (int i = 0; i < FASOUND_MAX_SOUND_CARDS; i++) {
-        struct card *card = g.cards[i];
+        struct card_t *card = g.cards[i];
         if (!card) 
             continue;
 
         const char *name_hw = card->name_hw;
-        card_names_hw[i] = strdup(name_hw); // -O-
+        card_names_hw[i] = f_strdup(name_hw); // -O-
         const char *name_string = card->name_string;
-        card_names_string[i] = strdup(name_string); // -O-
+        card_names_string[i] = f_strdup(name_string); // -O-
 
         for (int j = 0; j < card->num_ctls; j++) {
-            struct ctl *ctl = card->ctls[j];
+            struct ctl_t *ctl = card->ctls[j];
             const char *elem_name = ctl->name;
-            ctl_names[i][j] = strdup(elem_name);
+            ctl_names[i][j] = f_strdup(elem_name);
         }
         for (int j = 0; j < card->num_fds; j++) {
             int fd = card->fds[j];
@@ -155,10 +143,10 @@ bool fasound_init(int options,
 bool fasound_set(int card_idx, int ctl_idx, int chan_idx, double val_perc) {
     if (card_idx >= g.num_cards)
         pieprf;
-    struct card *card = g.cards[card_idx];
+    struct card_t *card = g.cards[card_idx];
     if (ctl_idx >= card->num_ctls) 
         pieprf;
-    struct ctl *ctl = card->ctls[ctl_idx];
+    struct ctl_t *ctl = card->ctls[ctl_idx];
 
     double set = ctl->min + val_perc / 100.0 * 1.0 * (ctl->max - ctl->min);
     if (set > ctl->max) set = ctl->max;
@@ -186,10 +174,10 @@ bool fasound_set_rel(int card_idx, int ctl_idx, int chan_idx, int delta_perc) {
 
     if (card_idx >= g.num_cards)
         pieprf;
-    struct card *card = g.cards[card_idx];
+    struct card_t *card = g.cards[card_idx];
     if (ctl_idx >= card->num_ctls) 
         pieprf;
-    struct ctl *ctl = card->ctls[ctl_idx];
+    struct ctl_t *ctl = card->ctls[ctl_idx];
 
     bool ok = true;
     int floor, ceiling;
@@ -241,10 +229,10 @@ bool fasound_update(int card_idx, int ctl_idx, bool *changed) {
         *changed = false;
     if (card_idx >= g.num_cards)
         pieprf;
-    struct card *card = g.cards[card_idx];
+    struct card_t *card = g.cards[card_idx];
     if (ctl_idx >= card->num_ctls) 
         pieprf;
-    struct ctl *ctl = card->ctls[ctl_idx];
+    struct ctl_t *ctl = card->ctls[ctl_idx];
     snd_mixer_elem_t *elem = ctl->elem;
 
     long this_value;
@@ -283,10 +271,10 @@ bool fasound_get(int card_idx, int ctl_idx, double *val_perc) {
     *val_perc = -1;
     if (card_idx >= g.num_cards)
         pieprf;
-    struct card *card = g.cards[card_idx];
+    struct card_t *card = g.cards[card_idx];
     if (ctl_idx >= card->num_ctls) 
         pieprf;
-    struct ctl *ctl = card->ctls[ctl_idx];
+    struct ctl_t *ctl = card->ctls[ctl_idx];
 
     long this_value;
     // Take average if channels differ. 
@@ -319,13 +307,17 @@ bool fasound_handle_event(int card_num) {
         iwarn("Invalid card num (%s)", _t);
         return false;
     }
-    struct card *card = g.cards[card_num];
+    struct card_t *card = g.cards[card_num];
     if (! card) 
         pieprf;
     snd_mixer_t *mixer = card->mixer;
     int rc = snd_mixer_handle_events(mixer);
     return true;    
 }
+
+/* Not cleaning up the various malloc's and calloc's in this function. Not
+ * doing much of anything, in fact.
+ */
 
 bool fasound_finish() {
     if (g.finished) {
@@ -410,7 +402,7 @@ static bool get_card_info() {
 
     bool found_a_card = false;
 
-    g.cards = calloc(FASOUND_MAX_SOUND_CARDS, sizeof(char*));
+    g.cards = f_calloct(FASOUND_MAX_SOUND_CARDS, char*);
 
     /* Card loop.
      */
@@ -446,8 +438,8 @@ static bool get_card_info() {
             continue;
         }
 
-        char *name_string = strdup(snd_ctl_card_info_get_name(card_info));
-        char *name_hw = strdup(hw);
+        char *name_string = f_strdup(snd_ctl_card_info_get_name(card_info));
+        char *name_hw = f_strdup(hw);
 
         _();
         G(name_string);
@@ -455,8 +447,8 @@ static bool get_card_info() {
         if (!quiet) 
             info("Found card %s at %s", _s, _t);
 
-        struct card *card = malloc(sizeof(struct card));
-        memset(card, '\0', sizeof(struct card));
+        struct card_t *card = f_mallocv(*card);
+        memset(card, '\0', sizeof(*card));
         g.num_cards++;
         card->idx = i;
 
@@ -488,7 +480,7 @@ static bool get_card_info() {
         bool found_a_ctl = false;
         snd_mixer_elem_t *elem;
 
-        card->ctls = calloc(count, sizeof(struct card*));
+        card->ctls = f_calloc(count, sizeof(struct card_t *));
 
         /* Elem loop.
          */
@@ -527,8 +519,8 @@ static bool get_card_info() {
                 continue;
             }
 
-            struct ctl *ctl = malloc(sizeof(struct ctl));
-            memset(ctl, '\0', sizeof(struct ctl));
+            struct ctl_t *ctl = f_mallocv(*ctl);
+            memset(ctl, '\0', sizeof(*ctl));
             
             ctl->name = sn;
             ctl->elem = elem;
@@ -582,7 +574,7 @@ static bool get_card_info() {
     return true;
 }
 
-static bool get_poll_descriptors(struct card *card) {
+static bool get_poll_descriptors(struct card_t *card) {
     card->can_poll = false;
     int num_fds = 0;
     num_fds = snd_mixer_poll_descriptors_count(card->mixer);
@@ -592,14 +584,14 @@ static bool get_poll_descriptors(struct card *card) {
     }
 
     card->num_fds = num_fds;
-    struct pollfd *pollfds = calloc(num_fds, sizeof(struct pollfd));
+    struct pollfd *pollfds = f_callocv(num_fds, *pollfds);
     int rc = snd_mixer_poll_descriptors(card->mixer, pollfds, num_fds);
     if (!rc) {
         f_warn("Couldn't get poll descriptors.");
         return false;
     }
 
-    card->fds = calloc(num_fds, sizeof(int));
+    card->fds = f_calloct(num_fds, int);
     struct pollfd *p = pollfds;
     for (int i = 0; i < num_fds; i++) {
         card->fds[i] = p->fd;

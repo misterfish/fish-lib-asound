@@ -1,5 +1,7 @@
 //#define DEBUG  // before fish-util.h
 
+#define _GNU_SOURCE
+
 #include "fish-asound.h"
 #include <inttypes.h> // abs
 

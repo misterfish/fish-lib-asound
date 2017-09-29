@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 // libasound2-dev
 #include <alsa/asoundlib.h>
 
